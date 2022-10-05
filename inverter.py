@@ -6,11 +6,6 @@ import torch.distributed.rpc as rpc
 
 class Server(object):
     def __init__(self, args):
-        # initialize all the workers
-        self.workers = []
-        for worker_rank in range(args.modelnames):
-            self.workers.append(Worker(worker_rank, args))
-        
         pass
 
     def optimize(self):
@@ -25,8 +20,8 @@ class Worker(object):
     def __init__(self, rank, args):
         self.rank = rank
         self.worker_name = rpc.get_worker_info().name
-        self.modelname = args.modelnames[rank]
-        self.device = f"cuda:{args.devices[rank]}" if args.devices[rank] >= 0 else "cpu"
+        self.modelname = args.modelnames[rank - 1]
+        self.device = f"cuda:{args.devices[rank - 1]}" if args.devices[rank - 1] >= 0 else "cpu"
         info = f"{self.worker_name} got {self.modelname} on device {self.device}"
         print(info)
         
@@ -43,16 +38,20 @@ class Worker(object):
 def run(rank, worldsize, args):
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = "7777"
-    #backend_options = rpc.TensorPipeRpcBackendOptions(
-    #    num_worker_threads = 16,
-    #    rpc_timeout = 0 # infinite timeout
-    #)
+    backend_options = rpc.TensorPipeRpcBackendOptions(
+        num_worker_threads = 16,
+        rpc_timeout = 0 # infinite timeout
+    )
     if rank != 0:
-        rpc.init_rpc(f"worker{rank}", rank=rank, world_size=worldsize, ) #rpc_backend_options=backend_options)
+        rpc.init_rpc(f"worker{rank}", rank=rank, world_size=worldsize, rpc_backend_options=backend_options)
         # all the workers wait passively for the server to kick off
     else:
-        rpc.init_rpc("server", rank=rank, world_size=worldsize, ) #rpc_backend_options=backend_options)
+        rpc.init_rpc("server", rank=rank, world_size=worldsize, rpc_backend_options=backend_options)
         server = Server(args)
+        workers = []
+        for worker_rank in range(1, worldsize):
+            workers.append(rpc.rpc_async(f"worker{worker_rank}", Worker, args=(worker_rank, args)))
+        torch.futures.wait_all(workers)
         server.optimize()
 
     rpc.shutdown()
