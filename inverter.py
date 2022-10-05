@@ -4,36 +4,8 @@ import torch
 
 import torch.distributed.rpc as rpc
 
-class Server(object):
-    def __init__(self, args):
-        pass
-
-    def optimize(self):
-        # for each iteration, send current input to each worker and wait all workers update their gradients
-        print("Optimize finished")
-
-
-
-    
-# worker prepares model; compute gradients in every iteration
-class Worker(object):
-    def __init__(self, rank, args):
-        self.rank = rank
-        self.worker_name = rpc.get_worker_info().name
-        self.modelname = args.modelnames[rank - 1]
-        self.device = f"cuda:{args.devices[rank - 1]}" if args.devices[rank - 1] >= 0 else "cpu"
-        info = f"{self.worker_name} got {self.modelname} on device {self.device}"
-        print(info)
-        
-
-    def prepare_model(self):
-        # select and initialize the model; Batchnorm hook the model
-        pass
-        
-    def compute_grad(self, input_rref):
-        pass
-
-
+from server import Server
+from worker import Worker
 
 def run(rank, worldsize, args):
     os.environ["MASTER_ADDR"] = "localhost"
@@ -62,6 +34,8 @@ if __name__ == "__main__":
         help="Model architectures to do BatchNorm inversion")
     parser.add_argument('--devices', default=[-1, -1], type=int, nargs='+',
         help="Devices for each model; -1 for cpu, x for cuda:x")
+
+
 
     args = parser.parse_args()
     assert len(args.modelnames) == len(args.devices)
