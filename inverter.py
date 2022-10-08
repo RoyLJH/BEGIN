@@ -16,12 +16,6 @@ def run(rank, worldsize, args):
     else:
         rpc.init_rpc("server", rank=rank, world_size=worldsize)
         server = Server(args)
-        workers = []
-        for worker_rank in range(1, worldsize):
-            workers.append(rpc.rpc_async(f"worker{worker_rank}", Worker, args=(worker_rank, args, rpc.RRef(server))))
-        for fut in workers:
-            worker = fut.wait()
-            worker.prepare_device()
         server.optimize()
 
     rpc.shutdown()

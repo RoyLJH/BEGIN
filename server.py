@@ -1,11 +1,20 @@
 import os
 import time
 import torch
+import torch.distributed.rpc as rpc
 import torchvision.utils
 import numpy as np
 
+from worker import Worker
+
 class Server(object):
     def __init__(self, args):
+        self.worker_rrefs = []
+        worldsize = len(args.modelnames) + 1
+        for worker_rank in range(1, worldsize):
+            self.worker_rrefs.append(rpc.remote(f"worker{worker_rank}", Worker, args=(worker_rank, args, rpc.RRef(self))))
+    
+
         self.args = args
         self.batchsize = len(args.categories) * args.samples_per_category
         self.labels = [l for _ in range(args.samples_per_category) for l in args.categories]
@@ -38,17 +47,23 @@ class Server(object):
         print(f"{timestamp} {text}")
         self.logger += f"{timestamp} {text}\n"
 
-    def get_logger(self):
-        return self.logger
-        
+
 
     def optimize(self):
+        for worker_rref in self.worker_rrefs:
+            worker_rref.rpc_async().prepare_device()
         for trial in range(self.args.trials):
             self.log(f"Starting Optimization for Trial {trial}...")
             self.input = torch.randn(self.batchsize, 3, 224, 224)
             for iter in range(self.args.iters):
+                grad_futs = []
+                for worker_rref in self.worker_rrefs:
+                    grad_futs.append(worker_rref.rpc_async().compute_grad(rpc.RRef(self.input)))
+                grad = sum(torch.futures.wait_all(grad_futs))
+                with torch.no_grad():
+                    self.input -= grad * 0.01
                 if (iter+1) % 1000 == 0:
-                    self.save_result(trial, iter)
+                    self.save_result(trial, iter+1)
         self.log("Optimization finished")
         with open(f"{self.result_folder_path}/log.txt", "w") as logfile:
             logfile.write(self.logger)

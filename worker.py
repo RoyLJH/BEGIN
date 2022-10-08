@@ -2,7 +2,6 @@ import torch
 import torchvision
 import torch.distributed.rpc as rpc
 
-from server import Server
 # worker prepares model; compute gradients in every iteration
 
 class BatchNormStatMatchingHook():
@@ -88,4 +87,5 @@ class Worker(object):
         self.log(f"Successfully load {self.modelname} on {self.device}")
 
     def compute_grad(self, input_rref):
-        pass
+        grad = torch.randn_like(input_rref.to_here()).to(self.device)
+        return grad.cpu()
