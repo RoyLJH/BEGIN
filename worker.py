@@ -18,64 +18,69 @@ class BatchNormStatMatchingHook():
 
 def prepare_model(modelname):
     # prepare the model 
-    torchvision_pretrained_dict = {
-        'convnext_base': 'ConvNeXt_Base_Weights',
-        'convnext_large': 'ConvNeXt_Large_Weights',
-        'convnext_small': 'ConvNeXt_Small_Weights',
-        'convnext_tiny': 'ConvNeXt_Tiny_Weights',
-        'densenet121': 'DenseNet121_Weights', 
-        'densenet161': 'DenseNet161_Weights',
-        'efficientnet_b0': 'EfficientNet_B0_Weights',
-        'efficientnet_b1': 'EfficientNet_B1_Weights',
-        'efficientnet_b2': 'EfficientNet_B2_Weights',
-        'efficientnet_b3': 'EfficientNet_B3_Weights',
-        'efficientnet_b4': 'EfficientNet_B4_Weights',
-        'efficientnet_b5': 'EfficientNet_B5_Weights',
-        'efficientnet_b6': 'EfficientNet_B6_Weights',
-        'efficientnet_b7': 'EfficientNet_B7_Weights',
-        'googlenet': 'GoogLeNet_Weights',
-        'inception_v3': 'Inception_V3_Weights',
-        'mnasnet0_5': 'MNASNet0_5_Weights',
-        'mnasnet1_0': 'MNASNet1_0_Weights',
-        'mobilenet_v2': 'MobileNet_V2_Weights',
-        'resnet18': 'ResNet18_Weights',
-        'resnet34': 'ResNet34_Weights',
-        'resnet50': 'ResNet50_Weights',
-        'resnet101': 'ResNet101_Weights',
-        'resnext50_32x4d': 'ResNeXt50_32X4D_Weights',
-        'resnext101_32x8d': 'ResNeXt101_32X8D_Weights',
-        'vgg11_bn': 'VGG11_BN_Weights',
-        'vgg13_bn': 'VGG13_BN_Weights',
-        'vgg16_bn': 'VGG16_BN_Weights',
-        'vgg19_bn': 'VGG19_BN_Weights',
-        'wide_resnet50_2': 'Wide_ResNet50_2_Weights',
-        'wide_resnet101_2': 'Wide_ResNet101_2_Weights',
-    }
-    if modelname in torchvision_pretrained_dict.keys():
-        model_func = getattr(torchvision.models, modelname)
-        model = model_func(weights=torchvision_pretrained_dict)
-        return model
+    if modelname == 'resnet18':
+        model = torchvision.models.resnet18(weights=torchvision.models.ResNet18_Weights.IMAGENET1K_V1)
+    elif modelname == 'resnet34':
+        model = torchvision.models.resnet34(weights=torchvision.models.ResNet34_Weights.IMAGENET1K_V1)
+    elif modelname == 'resnet50':
+        model = torchvision.models.resnet50(weights=torchvision.models.ResNet50_Weights.IMAGENET1K_V2)
+    elif modelname == 'resnet101':
+        model = torchvision.models.resnet101(weights=torchvision.models.ResNet101_Weights.IMAGENET1K_V2)
+    elif modelname == 'resnet152':
+        model = torchvision.models.resnet152(weights=torchvision.models.ResNet152_Weights.IMAGENET1K_V2)
+    elif modelname == 'resnext50_32x4d':
+        model = torchvision.models.resnext50_32x4d(weights=torchvision.models.ResNeXt50_32X4D_Weights.IMAGENET1K_V1)
+    elif modelname == 'resnext101_32x8d':
+        model = torchvision.models.resnext101_32x8d(weights=torchvision.models.ResNeXt101_32X8D_Weights.IMAGENET1K_V2)
+    elif modelname == 'wide_resnet50_2':
+        model = torchvision.models.wide_resnet50_2(weights=torchvision.models.Wide_ResNet50_2_Weights.IMAGENET1K_V2)
+    elif modelname == 'wide_resnet101_2':
+        model = torchvision.models.wide_resnet101_2(weights=torchvision.models.Wide_ResNet101_2_Weights.IMAGENET1K_V2)
+    elif modelname == 'vgg11_bn':
+        model = torchvision.models.vgg11_bn(weigths=torchvision.models.VGG11_BN_Weights.IMAGENET1K_V1)
+    elif modelname == 'vgg13_bn':
+        model = torchvision.models.vgg13_bn(weights=torchvision.models.VGG13_BN_Weights.IMAGENET1K_V1)
+    elif modelname == 'vgg16_bn':
+        model = torchvision.models.vgg16_bn(weights=torchvision.models.VGG16_BN_Weights.IMAGENET1K_V1)
+    elif modelname == 'vgg19_bn':
+        model = torchvision.models.vgg19_bn(weights=torchvision.models.VGG19_BN_Weights.IMAGENET1K_V1)
+    elif modelname == 'convnext_base':
+        model = torchvision.models.convnext_base(weights=torchvision.models.ConvNeXt_Base_Weights.IMAGENET1K_V1)
+    elif modelname == 'convnext_small':
+        model = torchvision.models.convnext_small(weights=torchvision.models.ConvNeXt_Small_Weights.IMAGENET1K_V1)
+    elif modelname == 'convnext_large':
+        model = torchvision.models.convnext_large(weights=torchvision.models.ConvNeXt_Large_Weights.IMAGENET1K_V1)
+    elif modelname == 'convnext_tiny':
+        model = torchvision.models.convnext_tiny(weights=torchvision.models.ConvNeXt_Tiny_Weights.IMAGENET1K_V1)
+    elif modelname == 'googlenet':
+        model = torchvision.models.googlenet(weights=torchvision.models.GoogLeNet_Weights.IMAGENET1K_V1)
+    elif modelname == 'inception_v3':
+        model = torchvision.models.inception_v3(weights=torchvision.models.Inception_V3_Weights.IMAGENET1K_V1)
     else:
-        raise NotImplementedError
-    
+        raise NotImplementedError(f"Do not support {modelname}; please add model architecture and pretrained weights to `worker.py: prepare_model()`")
+
+    # add BN hooks
+    bn_hooks = []
+    for module in model.modules():
+        if isinstance(module, torch.nn.BatchNorm2d):
+            bn_hooks.append(BatchNormStatMatchingHook(module))
+    return model, bn_hooks
+
 
 class Worker(object):
+    # Do not add any cuda tensors in this __init__ func(): torch.distributed.rpc framework only support cpu tensors
     def __init__(self, rank, args):
         self.rank = rank
         self.worker_name = rpc.get_worker_info().name
         self.modelname = args.modelnames[rank - 1]
         self.device = f"cuda:{args.devices[rank - 1]}" if args.devices[rank - 1] >= 0 else "cpu"
-        
+        self.model, self.bn_hooks = prepare_model(self.modelname)
         info = f"{self.worker_name} got {self.modelname} on device {self.device}"
         print(info)
-        
 
-    def prepare_model(self):
-        # Load pretrained weight
+    def prepare_device(self):
+        self.model = self.model.to(self.device)
+        print(f"{self.worker_name} successfully prepare model on {self.device}")
 
-
-        # Batchnorm hook the model
-        pass
-        
     def compute_grad(self, input_rref):
         pass
