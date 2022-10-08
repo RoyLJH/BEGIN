@@ -18,7 +18,7 @@ def run(rank, worldsize, args):
         server = Server(args)
         workers = []
         for worker_rank in range(1, worldsize):
-            workers.append(rpc.rpc_async(f"worker{worker_rank}", Worker, args=(worker_rank, args)))
+            workers.append(rpc.rpc_async(f"worker{worker_rank}", Worker, args=(worker_rank, args, rpc.RRef(server))))
         for fut in workers:
             worker = fut.wait()
             worker.prepare_device()
@@ -43,7 +43,9 @@ if __name__ == "__main__":
         help='Imagenet categories of images in the batch, values taken in [0, 999]')
     parser.add_argument('--samples-per-category', default=4, type=int,
         help='How many samples to generate for each catogory. Batchsize = `samples-per-category` * `categories`')
-    
+    parser.add_argument('--trials', default=2, type=int,
+        help='How many batches to generate for same setting')
+
     # Optimization
     parser.add_argument('--ce_scale', default=0.8, type=float,
         help='Cross entropy loss scale')

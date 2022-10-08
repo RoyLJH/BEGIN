@@ -1,6 +1,8 @@
 import torch
 import torchvision
 import torch.distributed.rpc as rpc
+
+from server import Server
 # worker prepares model; compute gradients in every iteration
 
 class BatchNormStatMatchingHook():
@@ -69,18 +71,21 @@ def prepare_model(modelname):
 
 class Worker(object):
     # Do not add any cuda tensors in this __init__ func(): torch.distributed.rpc framework only support cpu tensors
-    def __init__(self, rank, args):
+    def __init__(self, rank, args, server_rref):
         self.rank = rank
         self.worker_name = rpc.get_worker_info().name
+        self.server_rref = server_rref
         self.modelname = args.modelnames[rank - 1]
         self.device = f"cuda:{args.devices[rank - 1]}" if args.devices[rank - 1] >= 0 else "cpu"
         self.model, self.bn_hooks = prepare_model(self.modelname)
-        info = f"{self.worker_name} got {self.modelname} on device {self.device}"
-        print(info)
+
+    def log(self, text):
+        text = f"{self.worker_name} | {text}"
+        self.server_rref.rpc_sync().log(text)
 
     def prepare_device(self):
         self.model = self.model.to(self.device)
-        print(f"{self.worker_name} successfully prepare model on {self.device}")
+        self.log(f"Successfully load {self.modelname} on {self.device}")
 
     def compute_grad(self, input_rref):
         pass
