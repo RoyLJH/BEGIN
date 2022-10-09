@@ -14,10 +14,14 @@ class Server(object):
         for worker_rank in range(1, worldsize):
             self.worker_rrefs.append(rpc.remote(f"worker{worker_rank}", Worker, args=(worker_rank, args, rpc.RRef(self))))
     
-
         self.args = args
         self.batchsize = len(args.categories) * args.samples_per_category
-        self.labels = [l for _ in range(args.samples_per_category) for l in args.categories]
+        self.total_iters = args.iters
+        self.warmup_iters = args.warmup_iters
+        self.base_lr = args.lr
+        self.adam_betas = args.adam_betas
+        self.tv_scale = args.tv_scale
+        self.l2_scale = args.l2_scale
 
         timestamp = time.strftime("%m-%d %H-%M-%S", time.localtime())
         self.result_folder_path = f"results/{timestamp}/"
@@ -25,7 +29,61 @@ class Server(object):
             os.makedirs(self.result_folder_path)
         self.logger = ""
         self.log("Creating server...")
-        
+            
+    def adjust_lr(self, current_iter):
+        if current_iter < self.warmup_iters:
+            lr = self.base_lr * (current_iter + 1) / self.warmup_iters
+        else:
+            lr = 0.5 * (1 + np.cos(np.pi * (current_iter - self.warmup_iters)/(self.total_iters - self.warmup_iters))) * self.base_lr
+        self.optimizer.param_groups[0]['lr'] = lr
+
+    def get_tv_loss(self, x):
+        diff1 = x[:, :, :, :-1] - x[:, :, :, 1:]
+        diff2 = x[:, :, :-1, :] - x[:, :, 1:, :]
+        diff3 = x[:, :, 1:, :-1] - x[:, :, :-1, 1:]
+        diff4 = x[:, :, :-1, :-1] - x[:, :, 1:, 1:]
+        tv_loss = torch.norm(diff1) + torch.norm(diff2) + torch.norm(diff3) + torch.norm(diff4)
+        return tv_loss
+
+    def get_l2_loss(self, x):
+        return torch.norm(x, 2)
+
+    def optimize(self):
+        for worker_rref in self.worker_rrefs:
+            worker_rref.rpc_async().prepare_device()
+        for trial in range(self.args.trials):
+            self.log(f"Starting Optimization for Trial {trial}...")
+            self.input = torch.randn(self.batchsize, 3, 224, 224).requires_grad_(True)
+            self.optimizer = torch.optim.Adam([self.input], lr=self.base_lr, betas=self.adam_betas)
+            for iter in range(self.args.iters):
+                self.adjust_lr(iter)
+                self.optimizer.zero_grad()
+                # async call distributed workers to compute model loss
+                grad_futs = []
+                for worker_rref in self.worker_rrefs:
+                    grad_futs.append(worker_rref.rpc_async().compute_grad(rpc.RRef(self.input), iter))
+                # compute image pixel loss
+                tv_loss = self.get_tv_loss(self.input)
+                l2_loss = self.get_l2_loss(self.input)
+                image_loss = self.tv_scale * tv_loss + self.l2_scale * l2_loss
+                image_grad = torch.autograd.grad(image_loss, self.input)[0]
+                self.input.grad = image_grad
+                # aggregate model loss
+                self.input.grad += sum(torch.futures.wait_all(grad_futs))
+                # optimizer step
+                self.optimizer.step()
+                if (iter+1) % 100 == 0:
+                    self.save_result(trial, iter+1)
+        self.log("Optimization finished")
+        with open(f"{self.result_folder_path}/log.txt", "w") as logfile:
+            logfile.write(self.logger)
+
+
+    def log(self, text):
+        timestamp = time.strftime("%H-%M-%S", time.localtime())
+        print(f"{timestamp} {text}")
+        self.logger += f"{timestamp} {text}\n"
+
     def save_result(self, trial, iteration):
         ncols = len(self.args.categories)
         nrows = self.args.samples_per_category
@@ -41,29 +99,3 @@ class Server(object):
         reshaped_tensor = torch.stack(row_tensors, dim=1).reshape(3, 224*nrows, 224*ncols)
         img_path = f"{self.result_folder_path}/batch{trial}_iteration{iteration}.png"
         torchvision.utils.save_image(reshaped_tensor, img_path)
-            
-    def log(self, text):
-        timestamp = time.strftime("%H-%M-%S", time.localtime())
-        print(f"{timestamp} {text}")
-        self.logger += f"{timestamp} {text}\n"
-
-
-
-    def optimize(self):
-        for worker_rref in self.worker_rrefs:
-            worker_rref.rpc_async().prepare_device()
-        for trial in range(self.args.trials):
-            self.log(f"Starting Optimization for Trial {trial}...")
-            self.input = torch.randn(self.batchsize, 3, 224, 224)
-            for iter in range(self.args.iters):
-                grad_futs = []
-                for worker_rref in self.worker_rrefs:
-                    grad_futs.append(worker_rref.rpc_async().compute_grad(rpc.RRef(self.input)))
-                grad = sum(torch.futures.wait_all(grad_futs))
-                with torch.no_grad():
-                    self.input -= grad * 0.01
-                if (iter+1) % 1000 == 0:
-                    self.save_result(trial, iter+1)
-        self.log("Optimization finished")
-        with open(f"{self.result_folder_path}/log.txt", "w") as logfile:
-            logfile.write(self.logger)

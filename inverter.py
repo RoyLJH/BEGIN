@@ -37,7 +37,7 @@ if __name__ == "__main__":
         help='Imagenet categories of images in the batch, values taken in [0, 999]')
     parser.add_argument('--samples-per-category', default=4, type=int,
         help='How many samples to generate for each catogory. Batchsize = `samples-per-category` * `categories`')
-    parser.add_argument('--trials', default=2, type=int,
+    parser.add_argument('--trials', default=1, type=int,
         help='How many batches to generate for same setting')
 
     # Optimization
@@ -45,8 +45,10 @@ if __name__ == "__main__":
         help='Cross entropy loss scale')
     parser.add_argument('--bn_scale', default=0.05, type=float,
         help='BN statistics matching loss scale')
-    parser.add_argument('--tv_scale', default=3e-3, type=float,
+    parser.add_argument('--tv_scale', default=4e-3, type=float,
         help='Total variation image prior loss scale')
+    parser.add_argument('--l2_scale', default=0, type=float,
+        help='L2 image prior loss scale')
     parser.add_argument('--lr', default=0.8, type=float,
         help='Learning rate of the optimization process of input batch')
     parser.add_argument('--cos_lr', default=True, type=bool,

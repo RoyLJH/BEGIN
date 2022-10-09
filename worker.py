@@ -1,6 +1,8 @@
 import torch
 import torchvision
+import numpy as np
 import torch.distributed.rpc as rpc
+
 
 # worker prepares model; compute gradients in every iteration
 
@@ -77,6 +79,12 @@ class Worker(object):
         self.modelname = args.modelnames[rank - 1]
         self.device = f"cuda:{args.devices[rank - 1]}" if args.devices[rank - 1] >= 0 else "cpu"
         self.model, self.bn_hooks = prepare_model(self.modelname)
+        label_list = [l for _ in range(args.samples_per_category) for l in args.categories]
+        self.labels = torch.LongTensor(label_list).to(self.device)
+        self.ce_criterion = torch.nn.CrossEntropyLoss()
+        self.ce_scale = args.ce_scale
+        self.bn_scale = args.bn_scale
+        self.worker_best_loss = float("inf")
 
     def log(self, text):
         text = f"{self.worker_name} | {text}"
@@ -86,6 +94,15 @@ class Worker(object):
         self.model = self.model.to(self.device)
         self.log(f"Successfully load {self.modelname} on {self.device}")
 
-    def compute_grad(self, input_rref):
-        grad = torch.randn_like(input_rref.to_here()).to(self.device)
+
+    def compute_grad(self, input_rref, iteration):
+        input = input_rref.to_here().to(self.device)
+        output = self.model(input)
+        bn_loss = sum([hook.bn_matching_loss for hook in self.bn_hooks])
+        ce_loss = self.ce_criterion(output, self.labels)
+        worker_loss = self.ce_scale * ce_loss + self.bn_scale * bn_loss
+        if worker_loss.item() < self.worker_best_loss or iteration % 100 == 0:
+            self.worker_best_loss = min(self.worker_best_loss, worker_loss.item())
+            self.log(f"Iter {iteration} bn loss {bn_loss:.4f} ce loss {ce_loss:.4f}")
+        grad = torch.autograd.grad(worker_loss, input)[0]
         return grad.cpu()
