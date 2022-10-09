@@ -73,3 +73,9 @@ if __name__ == "__main__":
     assert len(args.modelnames) == len(args.devices)
     world_size = len(args.modelnames) + 1
     torch.multiprocessing.spawn(run, args=(world_size, args), nprocs=world_size, join=True)
+
+
+    """
+        1. The optimization result (or save image result seems to be wrong)
+        2. The rpc framework is superslow. Consider modifying the original ensemble_invert_ImageNet.py script as a faster implementation of the project.
+    """
