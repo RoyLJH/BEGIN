@@ -5,7 +5,6 @@ import torch
 import torch.distributed.rpc as rpc
 
 from server import Server
-from worker import Worker
 
 def run(rank, worldsize, args):
     os.environ["MASTER_ADDR"] = args.master_addr
@@ -27,7 +26,7 @@ if __name__ == "__main__":
         help="os.environ['MASTER_ADDR']")
     parser.add_argument('--master_port', default=7777, type=int,
         help="os.environ['MASTER_PORT']")
-    parser.add_argument('--modelnames', default=['resnet18', 'resnet50'], type=str, nargs='+',
+    parser.add_argument('--modelnames', default=['resnet18', 'resnet34'], type=str, nargs='+',
         help="Model architectures to do BatchNorm inversion")
     parser.add_argument('--devices', default=[0, 1], type=int, nargs='+',
         help="Devices for each model; -1 for cpu, x for cuda:x")
@@ -55,9 +54,9 @@ if __name__ == "__main__":
         help='Use cosine learning rate step strategy')
     parser.add_argument('--adam_betas', default=[0.3, 0.9], type=float, nargs='+',
         help='Beta parameter of the Adam optimizer')
-    parser.add_argument('--warmup_iters', default=500, type=int,
+    parser.add_argument('--warmup_iters', default=50, type=int,
         help='Warm-up iterations')
-    parser.add_argument('--iters', default=2000, type=int,
+    parser.add_argument('--iters', default=200, type=int,
         help='Iterations for optimization')
         
     # Post-processing

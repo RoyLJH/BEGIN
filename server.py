@@ -56,16 +56,16 @@ class Server(object):
             self.input = torch.randn(self.batchsize, 3, 224, 224).requires_grad_(True)
             self.optimizer = torch.optim.Adam([self.input], lr=self.base_lr, betas=self.adam_betas)
             worker_futs = []
-            for worker_rref in self.worker_rrefs:
-                worker_futs.append(worker_rref.rpc_async().receive_input_pointer(self.input))
-            torch.futures.wait_all(worker_futs)
+            #for worker_rref in self.worker_rrefs:
+            #    worker_futs.append(worker_rref.rpc_async().receive_input_pointer(self.input))
+            #torch.futures.wait_all(worker_futs)
             for iter in range(self.args.iters):
                 self.adjust_lr(iter)
                 self.optimizer.zero_grad()
                 # async call distributed workers to compute model loss
                 worker_futs.clear()
                 for worker_rref in self.worker_rrefs:
-                    worker_futs.append(worker_rref.rpc_async().compute_grad(iter))
+                    worker_futs.append(worker_rref.rpc_async().compute_grad(iter, rpc.RRef(self.input)))
                 # compute image pixel loss
                 tv_loss = self.get_tv_loss(self.input)
                 l2_loss = self.get_l2_loss(self.input)

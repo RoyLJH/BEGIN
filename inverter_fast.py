@@ -189,11 +189,11 @@ class ImagenetInverterWorker(threading.Thread):
         return self.inputs_pointer
 
 def log(text):
-    #global logger
-    #timestamp = time.strftime("%H-%M-%S", time.localtime())
-    #print(f"{timestamp} {text}")
-    #logger += f"{timestamp} {text}\n"
-    print(text)
+    global logger
+    timestamp = time.strftime("%H-%M-%S", time.localtime())
+    print(f"{timestamp} {text}")
+    logger += f"{timestamp} {text}\n"
+    #print(text)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Batchnorm Ensembled Generative INversion')
