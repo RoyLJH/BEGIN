@@ -72,6 +72,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     assert len(args.modelnames) == len(args.devices)
     world_size = len(args.modelnames) + 1
+    torch.backends.cudnn.benchmark = True
     torch.multiprocessing.spawn(run, args=(world_size, args), nprocs=world_size, join=True)
 
 
