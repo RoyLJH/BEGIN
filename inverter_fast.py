@@ -2,12 +2,9 @@ import torch
 import torch.nn as nn
 import torchvision
 import argparse
-import random
 import os
-import collections
 import numpy as np
 from PIL import Image
-from collections import OrderedDict
 import time
 import threading
 
@@ -23,7 +20,7 @@ class BatchNormStatMatchingHook():
         self.bn_matching_loss = torch.norm(module.running_mean.data - mean, 2) + \
             torch.norm(module.running_var.data - var, 2)
 
-def prepare_model(modelname):
+def prepare_model(modelname, device):
     # prepare the model 
     if modelname == 'resnet18':
         model = torchvision.models.resnet18(weights=torchvision.models.ResNet18_Weights.IMAGENET1K_V1)
@@ -66,6 +63,7 @@ def prepare_model(modelname):
     else:
         raise NotImplementedError(f"Do not support {modelname}; please add model architecture and pretrained weights to `worker.py: prepare_model()`")
 
+    model = model.to(device).eval()
     # add BN hooks
     bn_hooks = []
     for module in model.modules():
@@ -73,22 +71,38 @@ def prepare_model(modelname):
             bn_hooks.append(BatchNormStatMatchingHook(module))
     return model, bn_hooks
 
-threadSync = [False] * worldsize
-next_iter_flag = False
-threadSyncLock = threading.Lock()
-
 class ImagenetInverterWorker(threading.Thread):
-    def __init__(self, threadidx, args):
+    def __init__(self, threadidx, args, inputs, labels, trial):
         super(ImagenetInverterWorker, self).__init__()
         self.threadidx = threadidx
+        self.args = args
         self.modelname = args.modelnames[threadidx]
         self.device = args.devices[threadidx]
-
-        # optimization related
+        self.labels = labels.to(self.device)
+        self.inputs_pointer = inputs
+        self.inputs = inputs.clone().to(self.device)
+        self.model, self.bn_hooks = prepare_model(self.modelname, self.device)
         self.total_iters = args.iters
-        self.warmup_iters = args.warmup_iters
-        self.base_lr = args.lr
-        self.adam_betas = args.adam_betas
+        self.trial = trial
+
+        # loss scale
+        self.ce_scale = args.ce_scale
+        self.bn_scale = args.bn_scale
+        self.tv_scale = args.tv_scale
+        self.l2_scale = args.l2_scale
+
+        if threadidx == 0:
+            # optimization related (controlled by thread 0)
+            
+            self.warmup_iters = args.warmup_iters
+            self.base_lr = args.lr
+            self.adam_betas = args.adam_betas
+            self.optimizer = torch.optim.Adam([inputs], lr=args.lr, betas=args.adam_betas)
+
+            # post-processing related (controlled by thread 0)
+            self.roll = args.roll
+            self.flip = args.flip
+            self.clip = args.clip
 
     def adjust_lr(self, current_iter):
         if current_iter < self.warmup_iters:
@@ -97,13 +111,82 @@ class ImagenetInverterWorker(threading.Thread):
             lr = 0.5 * (1 + np.cos(np.pi * (current_iter - self.warmup_iters)/(self.total_iters - self.warmup_iters))) * self.base_lr
         self.optimizer.param_groups[0]['lr'] = lr
 
+    def get_tv_loss(self, x):
+        diff1 = x[:, :, :, :-1] - x[:, :, :, 1:]
+        diff2 = x[:, :, :-1, :] - x[:, :, 1:, :]
+        diff3 = x[:, :, 1:, :-1] - x[:, :, :-1, 1:]
+        diff4 = x[:, :, :-1, :-1] - x[:, :, 1:, 1:]
+        tv_loss = torch.norm(diff1) + torch.norm(diff2) + torch.norm(diff3) + torch.norm(diff4)
+        return tv_loss
+
+    def get_l2_loss(self, x):
+        return torch.norm(x, 2)
+
+    def save_result(self, trial, iteration):
+        global result_folder_path
+        ncols = len(self.args.categories)
+        nrows = self.args.samples_per_category
+        input_tensor = self.inputs.clone().detach()
+        dataset_mean = np.array([0.485, 0.456, 0.406])
+        dataset_std = np.array([0.229, 0.224, 0.225])
+        for c in range(3):
+            input_tensor[:, c] = torch.clamp(input_tensor[:, c] * dataset_std[c] + dataset_mean[c], 0, 1)
+        row_tensors_tuple = torch.split(input_tensor, split_size_or_sections=ncols)
+        row_tensors = []
+        for row_tensor in row_tensors_tuple:
+            row_tensors.append(torch.stack(row_tensor.split(1), dim=3).reshape(3, 224, 224 * ncols))
+        reshaped_tensor = torch.stack(row_tensors, dim=1).reshape(3, 224*nrows, 224*ncols)
+        img_path = f"{result_folder_path}/batch{trial}_iteration{iteration}.png"
+        torchvision.utils.save_image(reshaped_tensor, img_path)
+
     def run(self):
-        global worldsize, threadSync, threadSyncLock, next_iter_flag
+        global worldsize, threadSync
         ce_criterion = torch.nn.CrossEntropyLoss()
         best_loss = float("inf")
         for iter in range(self.total_iters):
             # Thread 0 (1) adjust LR (2) zero_grad (3) image prior loss
             if self.threadidx == 0:
+                self.adjust_lr(iter)
+                self.optimizer.zero_grad()
+                tv_loss = self.get_tv_loss(self.inputs)
+                l2_loss = self.get_l2_loss(self.inputs)
+                image_loss = self.tv_scale * tv_loss + self.l2_scale * l2_loss
+                image_loss.backward()
+            # All thread compute model loss
+            outputs = self.model(self.inputs)
+            bn_loss = sum([hook.bn_matching_loss for hook in self.bn_hooks])
+            ce_loss = ce_criterion(outputs, self.labels)
+            model_loss = self.ce_scale * ce_loss + self.bn_scale * bn_loss
+            if model_loss.item() < best_loss or iter % 10 == 0:
+                best_loss = min(best_loss, model_loss.item())
+                log(f"{self.modelname} iter {iter} bn_loss {bn_loss.item():.4f} ce_loss {ce_loss.item():.4f}")
+            model_loss.backward()
+
+            # Thread sync barrier (wait for all threads)
+            threadSync[self.threadidx] = True
+            if self.threadidx != 0:  # Thread (id>0) wait passively for thread 0 to kick off next iter
+                while threadSync[self.threadidx]:
+                    time.sleep(0.001)
+                    continue
+            else: # Thread 0 save image and kick off
+                if (iter + 1) % 200 == 0:
+                    self.save_result(self.trial, iter+1)
+                while True:
+                    syncFlag = True
+                    for threadSyncFlag in threadSync:
+                        syncFlag = syncFlag and threadSyncFlag
+                    # syncFlag == True : All threads finished model_loss.backward()
+                    if syncFlag:
+                        self.optimizer.step()
+                        threadSync = [False] * worldsize
+                        break
+            
+            # Prepare for next iteration
+            self.inputs = self.inputs_pointer.clone().to(self.device)
+
+        if self.threadidx == 0:
+            log("Optimization ends!")
+        return self.inputs_pointer
 
 
 class ImageNetInverterThread(threading.Thread):
@@ -565,42 +648,6 @@ class ImageNetInverterThread(threading.Thread):
             for id in list:
                 print(all_targets[id])
 
-def main():
-
-
-    threadTotal = len(args.modelnames)
-    for i in range(threadTotal):
-        threadSync.append(False)
-
-    # placeholder for inputs
-    inputs = torch.autograd.Variable(
-        torch.randn((label_num * args.sample_per_label, 3, 224, 224), 
-        requires_grad=True, device=devices[0]), requires_grad=True)
-    
-    # optimizer
-    optimizer = torch.optim.Adam([inputs], lr=args.lr, betas=args.betas)
-    print("Start ImageNet inversion from ", args.modelnames)
-    
-
-    threads = []
-    for i in range(threadTotal):
-        thread = ImageNetInverterThread(threadidx=i, inputs_ori=inputs, optimizer=optimizer,
-                modelnames=args.modelnames, devices=devices,
-                optimizer_betas=args.betas, lr=args.lr, iters=args.iters, warmup_iters=args.warmup_iters,
-                cos_lr=args.cos_lr, decay_iter=args.decay_iter, decay_coeff=args.decay_coeff,
-                target_labels=targets, sample_per_label=args.sample_per_label,
-                main_scale=args.main_scale, bn_scale=args.bn_scale, first_bn_scale=args.first_bn_scale,
-                tvl1_scale=args.tvl1_scale, tvl2_scale=args.tvl2_scale, l2_scale=args.l2_scale, var_scale=args.var_scale, 
-                low_res=args.low_res, roll=args.roll, flip=args.flip, clip=args.clip,
-                info=args.info, save_rows=args.save_rows, save_cols=args.save_cols)
-        threads.append(thread)
-    
-    for i in range(threadTotal):
-        threads[i].start()
-    for i in range(threadTotal):
-        threads[i].join()
-    exit()
-
 
 def log(text):
     global logger
@@ -666,14 +713,6 @@ if __name__ == "__main__":
     devices = [('cpu' if d==-1 else f'cuda:{d}') for d in args.devices]
     threadSync = [False] * worldsize
     next_iter_flag = False
-    threadSyncLock = threading.Lock()
-
-    # Optimization Setting
-    label_list = [l for _ in range(args.samples_per_category) for l in args.categories]
-    labels = torch.LongTensor(label_list)
-    for trial in range(args.trials):
-        inputs = torch.randn(len(labels), 3, 224, 224).requires_grad_(True)
-        optimizer = torch.optim.Adam([inputs], lr=args.lr, betas=args.adam_betas)
 
     # Miscellaneous
     timestamp = time.strftime("%m-%d %H-%M-%S", time.localtime())
@@ -683,7 +722,21 @@ if __name__ == "__main__":
     logger = ""
     log(f"Batchnorm Ensembled Generative INversion (faster impl) from {args.modelnames}")
 
-
-    log("Optimization finished")
+    # Optimization Setting
+    label_list = [l for _ in range(args.samples_per_category) for l in args.categories]
+    labels = torch.LongTensor(label_list)
+    for trial in range(args.trials):
+        inputs = torch.randn(len(labels), 3, 224, 224).requires_grad_(True)
+        threads = []
+        for i in range(worldsize):
+            threads.append(ImagenetInverterWorker(threadidx=i, args=args, inputs=inputs, labels=labels, trial=trial))
+        begintime = time.time()
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        endtime = time.time()
+        log(f"Batch {trial} optimization time: {endtime - begintime} seconds.")
+    
     with open(f"{result_folder_path}/log.txt", "w") as logfile:
         logfile.write(logger)
