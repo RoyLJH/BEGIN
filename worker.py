@@ -40,7 +40,7 @@ def prepare_model(modelname):
     elif modelname == 'wide_resnet101_2':
         model = torchvision.models.wide_resnet101_2(weights=torchvision.models.Wide_ResNet101_2_Weights.IMAGENET1K_V2)
     elif modelname == 'vgg11_bn':
-        model = torchvision.models.vgg11_bn(weigths=torchvision.models.VGG11_BN_Weights.IMAGENET1K_V1)
+        model = torchvision.models.vgg11_bn(weights=torchvision.models.VGG11_BN_Weights.IMAGENET1K_V1)
     elif modelname == 'vgg13_bn':
         model = torchvision.models.vgg13_bn(weights=torchvision.models.VGG13_BN_Weights.IMAGENET1K_V1)
     elif modelname == 'vgg16_bn':
