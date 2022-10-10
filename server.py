@@ -53,12 +53,10 @@ class Server(object):
             worker_rref.rpc_async().prepare_device()
         for trial in range(self.args.trials):
             self.log(f"Starting Optimization for Trial {trial}...")
+            begintime = time.time()
             self.input = torch.randn(self.batchsize, 3, 224, 224).requires_grad_(True)
             self.optimizer = torch.optim.Adam([self.input], lr=self.base_lr, betas=self.adam_betas)
             worker_futs = []
-            #for worker_rref in self.worker_rrefs:
-            #    worker_futs.append(worker_rref.rpc_async().receive_input_pointer(self.input))
-            #torch.futures.wait_all(worker_futs)
             for iter in range(self.args.iters):
                 self.adjust_lr(iter)
                 self.optimizer.zero_grad()
@@ -70,15 +68,18 @@ class Server(object):
                 tv_loss = self.get_tv_loss(self.input)
                 l2_loss = self.get_l2_loss(self.input)
                 image_loss = self.tv_scale * tv_loss + self.l2_scale * l2_loss
-                image_loss.backward()
-                
+                server_grad = torch.autograd.grad(image_loss, self.input)[0]
+
                 # wait for all workers to aggregate gradients
-                torch.futures.wait_all(worker_futs)
+                worker_grad = sum(torch.futures.wait_all(worker_futs))
+                self.input.grad = server_grad + worker_grad
 
                 # optimizer step
                 self.optimizer.step()
-                if (iter+1) % 100 == 0:
+                if (iter+1) % 50 == 0:
                     self.save_result(trial, iter+1)
+            endtime = time.time()
+            self.log(f"Trial {trial} optimization time {endtime - begintime} seconds")
         self.log("Optimization finished")
         with open(f"{self.result_folder_path}/log.txt", "w") as logfile:
             logfile.write(self.logger)

@@ -94,17 +94,14 @@ class Worker(object):
         self.model = self.model.to(self.device)
         self.log(f"Successfully load {self.modelname} on {self.device}")
 
-    def receive_input_pointer(self, input_pointer):
-        self.input = input_pointer
-
     def compute_grad(self, iteration, input_rref):
         input = input_rref.to_here().clone().to(self.device)
         output = self.model(input)
         bn_loss = sum([hook.bn_matching_loss for hook in self.bn_hooks])
         ce_loss = self.ce_criterion(output, self.labels)
         worker_loss = self.ce_scale * ce_loss + self.bn_scale * bn_loss
-        if worker_loss.item() < self.worker_best_loss or iteration % 10 == 0:
+        if worker_loss.item() < self.worker_best_loss or iteration % 1 == 0:
             self.worker_best_loss = min(self.worker_best_loss, worker_loss.item())
             self.log(f"Iter {iteration} bn loss {bn_loss:.4f} ce loss {ce_loss:.4f}")
-        worker_loss.backward()
-        return 0
+        worker_grad = torch.autograd.grad(worker_loss, input)[0]
+        return worker_grad.cpu()
