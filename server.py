@@ -36,6 +36,7 @@ class Server(object):
         else:
             lr = 0.5 * (1 + np.cos(np.pi * (current_iter - self.warmup_iters)/(self.total_iters - self.warmup_iters))) * self.base_lr
         self.optimizer.param_groups[0]['lr'] = lr
+        self.log(f"Iteration {current_iter} learning rate {lr}")
 
     def get_tv_loss(self, x):
         diff1 = x[:, :, :, :-1] - x[:, :, :, 1:]

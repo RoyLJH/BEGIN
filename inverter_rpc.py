@@ -54,9 +54,9 @@ if __name__ == "__main__":
         help='Use cosine learning rate step strategy')
     parser.add_argument('--adam_betas', default=[0.3, 0.9], type=float, nargs='+',
         help='Beta parameter of the Adam optimizer')
-    parser.add_argument('--warmup_iters', default=500, type=int,
+    parser.add_argument('--warmup_iters', default=50, type=int,
         help='Warm-up iterations')
-    parser.add_argument('--iters', default=2000, type=int,
+    parser.add_argument('--iters', default=200, type=int,
         help='Iterations for optimization')
         
     # Post-processing

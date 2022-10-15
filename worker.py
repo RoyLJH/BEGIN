@@ -71,7 +71,7 @@ def prepare_model(modelname):
 
 
 class Worker(object):
-    # Do not add any cuda tensors in this __init__ func(): torch.distributed.rpc framework only support cpu tensors
+    # Do not add any cuda tensors in __init__(): torch.distributed.rpc framework only support cpu tensors
     def __init__(self, rank, args, server_rref):
         self.rank = rank
         self.worker_name = rpc.get_worker_info().name

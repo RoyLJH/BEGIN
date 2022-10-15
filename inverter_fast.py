@@ -27,19 +27,19 @@ def prepare_model(modelname, device):
     elif modelname == 'resnet34':
         model = torchvision.models.resnet34(weights=torchvision.models.ResNet34_Weights.IMAGENET1K_V1)
     elif modelname == 'resnet50':
-        model = torchvision.models.resnet50(weights=torchvision.models.ResNet50_Weights.IMAGENET1K_V2)
+        model = torchvision.models.resnet50(weights=torchvision.models.ResNet50_Weights.IMAGENET1K_V1)
     elif modelname == 'resnet101':
-        model = torchvision.models.resnet101(weights=torchvision.models.ResNet101_Weights.IMAGENET1K_V2)
+        model = torchvision.models.resnet101(weights=torchvision.models.ResNet101_Weights.IMAGENET1K_V1)
     elif modelname == 'resnet152':
-        model = torchvision.models.resnet152(weights=torchvision.models.ResNet152_Weights.IMAGENET1K_V2)
+        model = torchvision.models.resnet152(weights=torchvision.models.ResNet152_Weights.IMAGENET1K_V1)
     elif modelname == 'resnext50_32x4d':
         model = torchvision.models.resnext50_32x4d(weights=torchvision.models.ResNeXt50_32X4D_Weights.IMAGENET1K_V1)
     elif modelname == 'resnext101_32x8d':
-        model = torchvision.models.resnext101_32x8d(weights=torchvision.models.ResNeXt101_32X8D_Weights.IMAGENET1K_V2)
+        model = torchvision.models.resnext101_32x8d(weights=torchvision.models.ResNeXt101_32X8D_Weights.IMAGENET1K_V1)
     elif modelname == 'wide_resnet50_2':
-        model = torchvision.models.wide_resnet50_2(weights=torchvision.models.Wide_ResNet50_2_Weights.IMAGENET1K_V2)
+        model = torchvision.models.wide_resnet50_2(weights=torchvision.models.Wide_ResNet50_2_Weights.IMAGENET1K_V1)
     elif modelname == 'wide_resnet101_2':
-        model = torchvision.models.wide_resnet101_2(weights=torchvision.models.Wide_ResNet101_2_Weights.IMAGENET1K_V2)
+        model = torchvision.models.wide_resnet101_2(weights=torchvision.models.Wide_ResNet101_2_Weights.IMAGENET1K_V1)
     elif modelname == 'vgg11_bn':
         model = torchvision.models.vgg11_bn(weigths=torchvision.models.VGG11_BN_Weights.IMAGENET1K_V1)
     elif modelname == 'vgg13_bn':
@@ -63,12 +63,12 @@ def prepare_model(modelname, device):
     else:
         raise NotImplementedError(f"Do not support {modelname}; please add model architecture and pretrained weights to `worker.py: prepare_model()`")
 
-    model = model.to(device).eval()
     # add BN hooks
     bn_hooks = []
     for module in model.modules():
         if isinstance(module, torch.nn.BatchNorm2d):
             bn_hooks.append(BatchNormStatMatchingHook(module))
+    model = model.to(device).eval()
     return model, bn_hooks
 
 class ImagenetInverterWorker(threading.Thread):
@@ -157,7 +157,7 @@ class ImagenetInverterWorker(threading.Thread):
             bn_loss = sum([hook.bn_matching_loss for hook in self.bn_hooks])
             ce_loss = ce_criterion(outputs, self.labels)
             model_loss = self.ce_scale * ce_loss + self.bn_scale * bn_loss
-            if model_loss.item() < best_loss or iter % 100 == 0:
+            if model_loss.item() < best_loss or iter % 1 == 0:
                 best_loss = min(best_loss, model_loss.item())
                 log(f"{self.modelname} iter {iter} bn_loss {bn_loss.item():.4f} ce_loss {ce_loss.item():.4f}")
             model_loss.backward()
@@ -169,7 +169,7 @@ class ImagenetInverterWorker(threading.Thread):
                     time.sleep(0.001)
                     continue
             else: # Thread 0 save image and kick off
-                if (iter + 1) % 200 == 0:
+                if (iter + 1) % 50 == 0:
                     self.save_result(self.trial, iter+1)
                 while True:
                     syncFlag = True
@@ -178,6 +178,8 @@ class ImagenetInverterWorker(threading.Thread):
                     # syncFlag == True : All threads finished model_loss.backward()
                     if syncFlag:
                         self.optimizer.step()
+                        #with torch.no_grad():
+                        #    self.inputs_pointer.data = torch.sigmoid(self.inputs_pointer)
                         threadSync = [False] * worldsize
                         break
             
@@ -202,7 +204,7 @@ if __name__ == "__main__":
         help="os.environ['MASTER_ADDR']")
     parser.add_argument('--master_port', default=7777, type=int,
         help="os.environ['MASTER_PORT']")
-    parser.add_argument('--modelnames', default=['resnet18', 'resnet50'], type=str, nargs='+',
+    parser.add_argument('--modelnames', default=['resnet18', 'resnet34'], type=str, nargs='+',
         help="Model architectures to do BatchNorm inversion")
     parser.add_argument('--devices', default=[0, 1], type=int, nargs='+',
         help="Devices for each model; -1 for cpu, x for cuda:x")
@@ -266,7 +268,8 @@ if __name__ == "__main__":
     label_list = [l for _ in range(args.samples_per_category) for l in args.categories]
     labels = torch.LongTensor(label_list)
     for trial in range(args.trials):
-        inputs = torch.randn(len(labels), 3, 224, 224, device=devices[0]).requires_grad_(True)
+        inputs = torch.randn(len(labels), 3, 224, 224, device=devices[0]) * 0.01
+        inputs.requires_grad_(True)
         threads = []
         for i in range(worldsize):
             threads.append(ImagenetInverterWorker(threadidx=i, args=args, inputs=inputs, labels=labels, trial=trial))
