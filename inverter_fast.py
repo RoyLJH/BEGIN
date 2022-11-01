@@ -263,7 +263,9 @@ if __name__ == "__main__":
         os.makedirs(result_folder_path)
     logger = ""
     log(f"Batchnorm Ensembled Generative INversion (faster impl) from {args.modelnames}")
-
+    argnamespace = str(args)
+    log(argnamespace)
+    
     # Optimization Setting
     label_list = [l for _ in range(args.samples_per_category) for l in args.categories]
     labels = torch.LongTensor(label_list)
