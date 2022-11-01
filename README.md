@@ -33,10 +33,14 @@ The phenomenon of shortcut learning of DNNs is defined and described in [Geirhos
 
 Let's take the inversion result from a single ResNet 101 as an example:
 
+![res101](demos/res101.png)
 
-What network learn from Imagenet can be quite complex. For some category, it may only learns the texture, but for some other categories, it can learn to capture **shape**(*ballon*) and **color** (*strawberry* and *traffic light*), **object parts** (*snake head*, *husky dog* eyes and body) or even **relevant object parts**(human face for *mobile phone*, human arm for *guitar*) .
+What network learn from Imagenet can be quite complex. For some category, it may only learns the texture, but for some other categories, it can learn to capture **shape**(*ballon*) and **color** (*strawberry* and *traffic light*), **object parts** (*snake head*, *husky dog* eyes and body) or even **relevant object parts**(grassland for *daisy*, human face for *mobile phone*, human arm for *guitar*) .
 
-And if we jointly invert from multiple networks, for example a combination of ():
+
+And if we jointly invert from multiple networks, for example a combination of 8 models (GoogleNet, ResNet34, ResNet50, ResNet101, ResNext50_32x4d, WRN50_2, WRN101_2, VGG19_BN):
+
+![8 models joint](demos/joint8.png)
 
 We can see from above that the inversion quality is better than inversion from a single network. That makes sense since networks with different architecuture and learning process capture different aspects or shortcuts of source data distribution. Joint inversion seeks a "consensus" among all networks, kind of compose all the surfaces to avoid biases learnt by any single network.
 
@@ -51,7 +55,7 @@ First image shows Resnet50 + Resnet101 BN inversion (both use torchvision pretra
 Second image shows Resnet50 + Resnet101 BN inversion (both use torchvision pretrained weight IMAGENET1K_V2)
 
 
-Second result shows cutting line inside single image, which can indicate the use of cutmix data augmentation (as indeed used in training [IMAGENET1K_V2 weights](https://pytorch.org/blog/how-to-train-state-of-the-art-models-using-torchvision-latest-primitives/)). This can be seen as another example of how Batchnorm statistics encodes strong informative clues of training data, and can be used by malicious attackers to breach the privacy.
+Second result shows cutting line and trace of stitched image patches inside single image, which can indicate the use of cutmix data augmentation (as indeed used in training [IMAGENET1K_V2 weights](https://pytorch.org/blog/how-to-train-state-of-the-art-models-using-torchvision-latest-primitives/)). This can be seen as another example of how Batchnorm statistics encodes strong informative clues of training data, and can be used by malicious attackers to breach the privacy.
 
 ### Semantic Information in BN statistics: decoupling BN matching loss and classification loss
 All the above inverted results uses BatchNorm matching loss (L2 distance of mean and variance of current batch and the restored BN stats of whole dataset) along with classification loss. We show that only uses information from BN layers can give us quite a lot information of the image distribution. 
