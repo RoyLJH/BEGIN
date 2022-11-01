@@ -52,8 +52,11 @@ Here we give another example of how BN statistics can even expose the data augme
 
 First image shows Resnet50 + Resnet101 BN inversion (both use torchvision pretrained weight IMAGENET1K_V1) 
 
+![res50+res101_v1](demos/res50+res101_V1.png)
+
 Second image shows Resnet50 + Resnet101 BN inversion (both use torchvision pretrained weight IMAGENET1K_V2)
 
+![res50+res101_v2](demos/res50+res101_V2.png)
 
 Second result shows cutting line and trace of stitched image patches inside single image, which can indicate the use of cutmix data augmentation (as indeed used in training [IMAGENET1K_V2 weights](https://pytorch.org/blog/how-to-train-state-of-the-art-models-using-torchvision-latest-primitives/)). This can be seen as another example of how Batchnorm statistics encodes strong informative clues of training data, and can be used by malicious attackers to breach the privacy.
 
