@@ -29,12 +29,16 @@ To add a new model into joint optimization, add your model into `prepare_model()
 ## Interesting findings
 
 ### Shortcut learning
-The phenomenon of shortcut learning of DNNs is defined and described in [Geirhos et al](https://www.nature.com/articles/s42256-020-00257-z). In discriminative learning, it would only pick any feature that is sufficient to reliably discriminate on a given dataset. 
+The phenomenon of shortcut learning of DNNs is defined and described in [Geirhos et al.](https://www.nature.com/articles/s42256-020-00257-z). In discriminative learning, it would only pick any feature that is sufficient to reliably discriminate on a given dataset.  A well known claim is that in image classification task, CNNs tend to capture **texture** instead of **shape** information [Geirhos et al](https://openreview.net/forum?id=Bygh9j09KX), [Islam et al](https://openreview.net/forum?id=NcFEZOi-rLa). From my perspective, the inversion progress can tell what information is encoded or captured in the network (the network can only capture more information than what we visualize, since we do not use any information other than network parameter itself). A more accurate way of describing this is: The network always looks for as simple patterns(shortcuts) as possible to achieve its objective. 
 
-Single model BN inversion (Resnet101):
+Let's take the inversion result from a single ResNet 101 as an example:
 
-Multiple model joint BN inversion():
 
+What network learn from Imagenet can be quite complex. For some category, it may only learns the texture, but for some other categories, it can learn to capture **shape**(*ballon*) and **color** (*strawberry* and *traffic light*), **object parts** (*snake head*, *husky dog* eyes and body) or even **relevant object parts**(human face for *mobile phone*, human arm for *guitar*) .
+
+And if we jointly invert from multiple networks, for example a combination of ():
+
+We can see from above that the inversion quality is better than inversion from a single network. That makes sense since networks with different architecuture and learning process capture different aspects or shortcuts of source data distribution. Joint inversion seeks a "consensus" among all networks, kind of compose all the surfaces to avoid biases learnt by any single network.
 
 ### Privacy leakage
 BN statistics expose quite much sensitive information of the training data. This is well known as quite many research papers on reconstruction-based 
@@ -49,6 +53,6 @@ Second image shows Resnet50 + Resnet101 BN inversion (both use torchvision pretr
 
 Second result shows cutting line inside single image, which can indicate the use of cutmix data augmentation (as indeed used in training [IMAGENET1K_V2 weights](https://pytorch.org/blog/how-to-train-state-of-the-art-models-using-torchvision-latest-primitives/)). This can be seen as another example of how Batchnorm statistics encodes strong informative clues of training data, and can be used by malicious attackers to breach the privacy.
 
-### Semantic Information encoded in BN statistics
-All the above inverted results uses BatchNorm matching loss (L2 distance of mean and variance of current batch and the restored BN stats of whole dataset) along with classification loss. We show that only uses information from BN layers can give us a lot information of the image distribution.
+### Semantic Information in BN statistics: decoupling BN matching loss and classification loss
+All the above inverted results uses BatchNorm matching loss (L2 distance of mean and variance of current batch and the restored BN stats of whole dataset) along with classification loss. We show that only uses information from BN layers can give us quite a lot information of the image distribution. 
 
