@@ -63,3 +63,6 @@ Second result shows cutting line and trace of stitched image patches inside sing
 ### Semantic Information in BN statistics: decoupling BN matching loss and classification loss
 All the above inverted results uses BatchNorm matching loss (L2 distance of mean and variance of current batch and the restored BN stats of whole dataset) along with classification loss. We show that only uses information from BN layers can give us quite a lot information of the image distribution. 
 
+![onlyBN](demos/onlyBN.png)
+
+Find interesting details yourself!
