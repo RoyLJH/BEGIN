@@ -60,7 +60,7 @@ Second image shows Resnet50 + Resnet101 BN inversion (both use torchvision pretr
 
 Second result shows cutting line and trace of stitched image patches inside single image, which can indicate the use of cutmix data augmentation (as indeed used in training [IMAGENET1K_V2 weights](https://pytorch.org/blog/how-to-train-state-of-the-art-models-using-torchvision-latest-primitives/)). This can be seen as another example of how Batchnorm statistics encodes strong informative clues of training data, and can be used by malicious attackers to breach the privacy.
 
-### Semantic Information in BN statistics: decoupling BN matching loss and classification loss
+### Semantic Information in BN statistics
 All the above inverted results uses BatchNorm matching loss (L2 distance of mean and variance of current batch and the restored BN stats of whole dataset) along with classification loss. We show that only uses information from BN layers can give us quite a lot information of the image distribution. 
 
 ![onlyBN](demos/onlyBN.png)
